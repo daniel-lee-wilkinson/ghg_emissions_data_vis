@@ -152,8 +152,23 @@ def plot_emissions_and_intensity_facets(df: pd.DataFrame, countries: list[str], 
             facet_kws={"sharex": True, "sharey": False},
         )
 
-    f.set_titles(row_template="{row_name}", col_template="{col_name}")
+    col_short = {METRIC_EMISSIONS: "Emissions (kt)", METRIC_INTENSITY: "Emissions Intensity (kt / M USD)"}
+    # Column headers on top row only
+    for j, col_val in enumerate(f.col_names):
+        f.axes[0, j].set_title(col_short[col_val])
+    for i in range(1, len(f.row_names)):
+        for j in range(len(f.col_names)):
+            f.axes[i, j].set_title("")
+    # Gas label on left side of each row
+    for i, row_val in enumerate(f.row_names):
+        f.axes[i, 0].annotate(
+            row_val,
+            xy=(0, 0.5), xycoords="axes fraction",
+            xytext=(-0.22, 0.5), textcoords="axes fraction",
+            ha="right", va="center", fontsize=9, annotation_clip=False,
+        )
     f.set_axis_labels("Year", "")
+    f.fig.subplots_adjust(wspace=0.4)
 
     yr_max = int(plot_df["Year"].max())
     f.axes.flat[0].set_xlim(1990, yr_max)
@@ -206,7 +221,18 @@ def plot_emissions_index_facets(df, countries, index_col, out_path=None):
             facet_kws={"sharex": True, "sharey": True},
         )
 
-    g.set_titles(row_template="{row_name}")
+    # Column header on top row only
+    g.axes[0, 0].set_title("Emissions Index (1990 = 100)")
+    for i in range(1, len(g.row_names)):
+        g.axes[i, 0].set_title("")
+    # Gas label on left side of each row
+    for i, row_val in enumerate(g.row_names):
+        g.axes[i, 0].annotate(
+            row_val,
+            xy=(0, 0.5), xycoords="axes fraction",
+            xytext=(-0.22, 0.5), textcoords="axes fraction",
+            ha="right", va="center", fontsize=9, annotation_clip=False,
+        )
 
     yr_max = int(df.loc[df[index_col].notna(), "Year"].max())
     g.axes.flat[0].set_xlim(1990, yr_max)
@@ -232,7 +258,9 @@ def plot_emissions_index_facets(df, countries, index_col, out_path=None):
         # Reference line added last so it is not picked up by the label loop
         ax.axhline(100, linestyle="--", color="#999999", linewidth=0.7, alpha=0.4, zorder=0)
 
-    g.set_axis_labels("Year", "Emissions Index (1990 = 100)")
+    g.set_axis_labels("Year", "")
+    for ax in g.axes.flat:
+        ax.set_ylabel("")
 
     if out_path is not None:
         save_fig(g.fig, out_path)
