@@ -1,16 +1,23 @@
-# This is a sample Python script.
+import csv
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+## import dataset
+
+data = pd.read_csv('data.csv')
+## explore dataset: data types, shape
+
+print(data.head())
+data.info()
+print(data.shape)
+print(data.describe())
+# print out the unique values of the Flag column
+print(data.nunique())
+## validate dataset: NAs, correct data types
+
+# count NAs
+data.isnull().sum()
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
-
-
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+##- --> there are only a few columns with more than one unique values: Area Code (M49), Area Code, Element Code, Element, Year Code, Year, Value
