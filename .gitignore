@@ -5,7 +5,7 @@ __pycache__/
 pipeline.db
 gdp_*.csv
 m49_lookup.csv
-Figures/
+#Figures/
 *.egg-info/
 .pytest_cache/
 node_modules/
