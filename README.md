@@ -1,5 +1,5 @@
 # European GHG Emissions & Agricultural Production Pipeline
-![tests](https://github.com/your-username/your-repo/actions/workflows/tests.yml/badge.svg)
+![tests](https://github.com/daniel-lee-wilkinson/ghg_emissions_data_vis/actions/workflows/tests.yml/badge.svg)
 
 A Python data engineering pipeline that ingests, validates, transforms, and stores greenhouse gas emissions and agricultural production data for Italy, Spain, France, and Germany (1990–2023). Outputs a DuckDB analytical database, six publication-quality figures, and an auto-generated Word report.
 
