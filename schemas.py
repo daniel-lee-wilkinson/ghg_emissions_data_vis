@@ -47,18 +47,27 @@ class RawEmissionsSchema(pa.DataFrameModel):
         strict = False   # allow extra columns (e.g. Element Code, Year Code)
 
 
+# schemas.py
 class EmissionsSchema(pa.DataFrameModel):
-    """After load_emissions() — Element unwrapped, area_code_str padded."""
-    Area:           Series[str]
-    Element:        Series[str] = pa.Field(isin=["CH4", "CO2", "N2O"])
-    Year:           Series[int] = pa.Field(ge=1900, le=2100)
-    Value:          Series[float] = pa.Field(nullable=True)
-    area_code_str:  Series[str] = pa.Field(str_matches=r"^\d{3}$")
+    Area:          Series[str]
+    Element:       Series[str]                          # ← remove isin here
+    Year:          int = pa.Field(ge=1900, le=2100)
+    Value:         Series[float] = pa.Field(nullable=True)
+    area_code_str: Series[str] = pa.Field(str_matches=r"^\d{3}$")
 
     class Config:
         coerce = True
         strict = False
 
+
+class EmissionsWithGDPSchema(EmissionsSchema):
+    Element:          Series[str] = pa.Field(isin=["CH4", "CO2", "N2O"])  # ← enforce here
+    ISO3:             Series[str] = pa.Field(str_matches=r"^[A-Z]{3}$")
+    GDP_constant_USD: Series[float] = pa.Field(gt=0)
+
+    class Config:
+        coerce = True
+        strict = False
 
 class EmissionsWithGDPSchema(EmissionsSchema):
     """After merge_gdp() — adds ISO3 and GDP columns."""

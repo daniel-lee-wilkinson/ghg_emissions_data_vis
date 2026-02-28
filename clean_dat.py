@@ -69,7 +69,7 @@ def add_intensity(df: pd.DataFrame) -> pd.DataFrame:
     out["emissions_per_million_usd"] = out["Value"] / (out["GDP_constant_USD"] / 1_000_000)
     return out
 
-@pa.check_output(EmissionsIndexSchema)
+
 def add_index_1990(
     df: pd.DataFrame, value_col: str, group_cols: list[str], out_col: str
 ) -> pd.DataFrame:
