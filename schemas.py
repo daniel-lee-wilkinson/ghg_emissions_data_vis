@@ -61,18 +61,12 @@ class EmissionsSchema(pa.DataFrameModel):
 
 
 class EmissionsWithGDPSchema(EmissionsSchema):
-    Element:          Series[str] = pa.Field(isin=["CH4", "CO2", "N2O"])  # ← enforce here
     ISO3:             Series[str] = pa.Field(str_matches=r"^[A-Z]{3}$")
     GDP_constant_USD: Series[float] = pa.Field(gt=0)
 
-    class Config:
-        coerce = True
-        strict = False
-
-class EmissionsWithGDPSchema(EmissionsSchema):
-    """After merge_gdp() — adds ISO3 and GDP columns."""
-    ISO3:             Series[str] = pa.Field(str_matches=r"^[A-Z]{3}$")
-    GDP_constant_USD: Series[float] = pa.Field(gt=0)
+    @pa.dataframe_check
+    def valid_element_values(cls, df):
+        return df["Element"].isin(["CH4", "CO2", "N2O"]).all()
 
     class Config:
         coerce = True
