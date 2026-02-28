@@ -20,6 +20,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from schemas import EmissionsWithGDPSchema, EmissionsIndexSchema, PercentChangeSchema, IndexSlopesSchema
+
+
 import pandera as pa
 from config import (
     COUNTRIES, EMISSIONS_PATH, FIG_DIR,
@@ -61,13 +63,13 @@ def merge_gdp(emissions: pd.DataFrame, gdp: pd.DataFrame) -> pd.DataFrame:
         log.warning("Dropping %d rows with no GDP data.", n_dropped)
     return out.dropna(subset=["GDP_constant_USD"]).copy()
 
-@pa.check_output(EmissionsIndexSchema)
+@pa.check_output(EmissionsWithGDPSchema)
 def add_intensity(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out["emissions_per_million_usd"] = out["Value"] / (out["GDP_constant_USD"] / 1_000_000)
     return out
 
-
+@pa.check_output(EmissionsIndexSchema)
 def add_index_1990(
     df: pd.DataFrame, value_col: str, group_cols: list[str], out_col: str
 ) -> pd.DataFrame:
