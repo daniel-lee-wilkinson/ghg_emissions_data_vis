@@ -36,12 +36,20 @@ class TestEmissionsSchema:
         result = EmissionsSchema.validate(df)
         assert len(result) == 2
 
+    # to this:
     def test_invalid_element_raises(self):
-        from schemas import EmissionsSchema
-        df = self._valid_df()
-        df.loc[0, "Element"] = "Emissions (CH4)"  # unwrapped form
+        from schemas import EmissionsWithGDPSchema
+        df = pd.DataFrame({
+            "Area":             ["Italy"],
+            "Element":          ["Emissions (CH4)"],  # unwrapped form — should fail
+            "Year":             [1990],
+            "Value":            [100.0],
+            "area_code_str":    ["380"],
+            "ISO3":             ["ITA"],
+            "GDP_constant_USD": [1_000_000_000.0],
+        })
         with pytest.raises(pa.errors.SchemaError):
-            EmissionsSchema.validate(df)
+            EmissionsWithGDPSchema.validate(df)
 
     def test_invalid_area_code_format_raises(self):
         from schemas import EmissionsSchema
