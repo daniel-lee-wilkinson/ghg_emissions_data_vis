@@ -1,5 +1,5 @@
 cat > .github/workflows/tests.yml << 'EOF'
-name: tests
+name: Run Tests
 on: [push, pull_request]
 jobs:
   test:
@@ -11,3 +11,4 @@ jobs:
           python-version: "3.13"
       - run: pip install -r requirements.txt
       - run: pytest
+EOF
