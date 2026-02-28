@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from schemas import EmissionsWithGDPSchema, EmissionsIndexSchema, PercentChangeSchema, IndexSlopesSchema
-
+import pandera as pa
 from config import (
     COUNTRIES, EMISSIONS_PATH, FIG_DIR,
     GDP_DATE_RANGE, GDP_INDICATOR,

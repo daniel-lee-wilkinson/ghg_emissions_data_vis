@@ -15,7 +15,7 @@ matplotlib.use('Agg')  # non-interactive backend, no display needed
 import pandas as pd
 import requests
 from schemas import EmissionsSchema, FAOStatSchema
-
+import pandera as pa
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
