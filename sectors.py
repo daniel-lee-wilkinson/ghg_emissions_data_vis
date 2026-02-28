@@ -1,41 +1,71 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from pathlib import Path
+"""
+sectors.py
+----------
+Sector-level GHG/CO₂ emissions breakdown for selected European countries.
 
-# -----------------------------
-# Config
-# -----------------------------
+Writes to database
+------------------
+    stg_sector_shares — normalised sector proportions for all countries
+"""
+from __future__ import annotations
+
+import logging
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from dataclasses import dataclass
+from enum import Enum
+from typing import Callable
+
+from config import COUNTRIES, FIG_DIR, ITALY_SECTORS_PATH, UBA_SECTORS_PATH
+from db import Database
+from plot_utils import save_fig
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+log = logging.getLogger(__name__)
+
 YEAR = 2023
-FIG_DIR = Path("Figures")
-FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 SECTOR_ORDER = [
-    "Transport",
-    "Industry",
-    "Agriculture",
-    "Energy",
-    "Residential and Commercial",
-    "Waste",
-    "LULUCF",
-    "Manufacturing",
-    "Fugitive Emissions",
-    "Aviation and Shipping",
+    "Transport", "Industry", "Agriculture", "Energy",
+    "Residential and Commercial", "Waste", "LULUCF",
+    "Manufacturing", "Fugitive Emissions", "Aviation and Shipping",
     "Other Fuel Combustion",
 ]
 
-# -----------------------------
-# Helpers
-# -----------------------------
-def sector_dict_to_long(d: dict, country: str, year: int) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "Country": country,
-            "Year": year,
-            "Sector": [str(k).strip() for k in d.keys()],
-            "Proportion": list(d.values()),
-        }
-    )
+
+class Gas(str, Enum):
+    CO2 = "CO2"
+    GHG = "GHG"
+
+
+@dataclass
+class CountrySource:
+    country: str
+    gas: Gas
+    source_note: str
+    load: Callable[[], dict[str, float]]
+
+    def to_long(self, year: int) -> pd.DataFrame:
+        data = self.load()
+        total = sum(data.values())
+        if total <= 0:
+            raise ValueError(f"{self.country}: sector values sum to zero or negative.")
+        df = pd.DataFrame({
+            "Country":    self.country,
+            "Year":       year,
+            "Gas":        self.gas.value,
+            "Sector":     list(data.keys()),
+            "Amount":     list(data.values()),
+            "source_note": self.source_note,
+        })
+        df["Proportion"] = df["Amount"] / total
+        prop_sum = df["Proportion"].sum()
+        if abs(prop_sum - 1.0) > 0.02:
+            raise ValueError(f"{self.country}: proportions sum to {prop_sum:.4f}, expected ~1.0")
+        return df
 
 
 def proportions_from_total(d: dict, total_key: str) -> dict:
@@ -43,148 +73,151 @@ def proportions_from_total(d: dict, total_key: str) -> dict:
     return {k: v / total for k, v in d.items() if k != total_key}
 
 
-# -----------------------------
-# Spain (Statista, 2023) - proportions already
-# -----------------------------
-spain_sectors = {
-    "Transport": 0.325,
-    "Industry": 0.186,
-    "Agriculture": 0.122,
-    "Energy": 0.114,
-    "Residential and Commercial": 0.085,
-    "Waste": 0.051,
-    "Other": 0.118,
-}
+# ---------------------------------------------------------------------------
+# Country loaders
+# ---------------------------------------------------------------------------
 
-# -----------------------------
-# Germany (UBA, 2023) -> proportions (CO2 only)
-# -----------------------------
-de_data = pd.read_csv("UBA_sectors.csv", sep=",")
+def _load_spain() -> dict[str, float]:
+    return {
+        "Transport":                  0.325,
+        "Industry":                   0.186,
+        "Agriculture":                0.122,
+        "Energy":                     0.114,
+        "Residential and Commercial": 0.085,
+        "Waste":                      0.051,
+    }
 
-DE_COLS = ["Substances", "D_SOURCE_CATEGORIES", "TIME_PERIOD", "OBS_VALUE"]
-DE_SECTORS = ["1_ENERGY", "2_INDUSTRY", "3_AGRICULTURE", "4_LULUCF", "5_WASTE", "TOTAL"]
-DE_SUBSTANCE = "Carbon dioxide"
 
-de_data = de_data[DE_COLS]
-de_data["D_SOURCE_CATEGORIES"] = de_data["D_SOURCE_CATEGORIES"].astype(str).str.strip()
-de_data["Substances"] = de_data["Substances"].astype(str).str.strip()
+def _load_france() -> dict[str, float]:
+    return {
+        "Transport":                  0.34,
+        "Industry":                   0.17,
+        "Residential and Commercial": 0.15,
+        "Agriculture":                0.21,
+        "Energy":                     0.09,
+        "Waste":                      0.04,
+    }
 
-de_data = de_data[de_data["D_SOURCE_CATEGORIES"].isin(DE_SECTORS)]
-de_data = de_data[de_data["TIME_PERIOD"] == YEAR]
-de_data = de_data[de_data["Substances"] == DE_SUBSTANCE]
 
-germany_abs = (
-    de_data.set_index("D_SOURCE_CATEGORIES")["OBS_VALUE"]
-    .apply(pd.to_numeric, errors="coerce")
-    .to_dict()
-)
+def _load_germany() -> dict[str, float]:
+    DE_SECTORS = ["1_ENERGY", "2_INDUSTRY", "3_AGRICULTURE", "4_LULUCF", "5_WASTE"]
+    DE_RENAME  = {"1_ENERGY": "Energy", "2_INDUSTRY": "Industry",
+                  "3_AGRICULTURE": "Agriculture", "4_LULUCF": "LULUCF", "5_WASTE": "Waste"}
+    df = pd.read_csv(UBA_SECTORS_PATH,
+                     usecols=["Substances", "D_SOURCE_CATEGORIES", "TIME_PERIOD", "OBS_VALUE"])
+    df["D_SOURCE_CATEGORIES"] = df["D_SOURCE_CATEGORIES"].str.strip()
+    df["Substances"]          = df["Substances"].str.strip()
+    df = df[
+        (df["D_SOURCE_CATEGORIES"].isin(DE_SECTORS)) &
+        (df["TIME_PERIOD"] == YEAR) &
+        (df["Substances"] == "Carbon dioxide")
+    ]
+    if df.empty:
+        raise ValueError(f"No German CO₂ data found for year {YEAR}.")
+    return (
+        df.set_index("D_SOURCE_CATEGORIES")["OBS_VALUE"]
+        .apply(pd.to_numeric, errors="coerce").dropna()
+        .rename(DE_RENAME).to_dict()
+    )
 
-germany_props = proportions_from_total(germany_abs, total_key="TOTAL")
 
-DE_RENAME = {
-    "1_ENERGY": "Energy",
-    "2_INDUSTRY": "Industry",
-    "3_AGRICULTURE": "Agriculture",
-    "4_LULUCF": "LULUCF",
-    "5_WASTE": "Waste",
-}
-germany_sectors = {DE_RENAME[k]: v for k, v in germany_props.items() if k in DE_RENAME}
+def _load_italy() -> dict[str, float]:
+    IT_SECTOR_COLS = [
+        "Buildings", "Industry", "Land-use change and forestry",
+        "Other fuel combustion", "Transport", "Manufacturing and construction",
+        "Fugitive emissions", "Electricity and heat", "Aviation and shipping",
+    ]
+    IT_RENAME = {
+        "Buildings":                      "Residential and Commercial",
+        "Land-use change and forestry":   "LULUCF",
+        "Other fuel combustion":          "Other Fuel Combustion",
+        "Manufacturing and construction": "Manufacturing",
+        "Fugitive emissions":             "Fugitive Emissions",
+        "Electricity and heat":           "Energy",
+        "Aviation and shipping":          "Aviation and Shipping",
+    }
+    df = pd.read_csv(ITALY_SECTORS_PATH)
+    row = df[df["Year"] == YEAR]
+    if row.empty:
+        raise ValueError(f"No Italy data found for year {YEAR}.")
+    long = (
+        row.melt(id_vars=["Year"], value_vars=IT_SECTOR_COLS,
+                 var_name="Sector", value_name="Amount")
+        .assign(Amount=lambda d: pd.to_numeric(d["Amount"], errors="coerce"))
+        .dropna(subset=["Amount"])
+    )
+    long["Sector"] = long["Sector"].replace(IT_RENAME)
+    return long.set_index("Sector")["Amount"].to_dict()
 
-# -----------------------------
-# France (you stated 2024, but we align to YEAR for plotting)
-# -----------------------------
-france_sectors = {
-    "Transport": 0.34,
-    "Industry": 0.17,
-    "Residential and Commercial": 0.15,
-    "Agriculture": 0.21,
-    "Energy": 0.09,
-    "Waste": 0.04,
-}
 
-# -----------------------------
-# Italy (CSV, 2023) -> proportions
-# -----------------------------
-italy_wide = pd.read_csv("italy_co-emissions-by-sector.csv")
-italy_wide = italy_wide[italy_wide["Year"] == YEAR].copy()
+# ---------------------------------------------------------------------------
+# Registry
+# ---------------------------------------------------------------------------
 
-IT_SECTOR_COLS = [
-    "Buildings",
-    "Industry",
-    "Land-use change and forestry",
-    "Other fuel combustion",
-    "Transport",
-    "Manufacturing and construction",
-    "Fugitive emissions",
-    "Electricity and heat",
-    "Aviation and shipping",
+COUNTRY_SOURCES: list[CountrySource] = [
+    CountrySource("Spain",   Gas.GHG, "Statista 2023", _load_spain),
+    CountrySource("France",  Gas.GHG, "CITEPA 2024",   _load_france),
+    CountrySource("Germany", Gas.CO2, "UBA 2023",      _load_germany),
+    CountrySource("Italy",   Gas.CO2, "OWiD 2023",     _load_italy),
 ]
 
-IT_RENAME = {
-    "Buildings": "Residential and Commercial",  # adjust if your intended schema differs
-    "Industry": "Industry",
-    "Land-use change and forestry": "LULUCF",
-    "Other fuel combustion": "Other Fuel Combustion",
-    "Transport": "Transport",
-    "Manufacturing and construction": "Manufacturing",
-    "Fugitive emissions": "Fugitive Emissions",
-    "Electricity and heat": "Energy",
-    "Aviation and shipping": "Aviation and Shipping",
-}
+registry_countries = {s.country for s in COUNTRY_SOURCES}
+for c in COUNTRIES:
+    if c not in registry_countries:
+        log.warning("'%s' is in COUNTRIES but has no CountrySource entry.", c)
 
-italy_long = italy_wide.melt(
-    id_vars=["Year"],
-    value_vars=IT_SECTOR_COLS,
-    var_name="Sector",
-    value_name="Amount",
-)
+# ---------------------------------------------------------------------------
+# Combine, validate, write
+# ---------------------------------------------------------------------------
 
-italy_long["Sector"] = italy_long["Sector"].astype(str).str.strip()
-italy_long["Amount"] = pd.to_numeric(italy_long["Amount"], errors="coerce")
-italy_long = italy_long.dropna(subset=["Amount"])
+frames = []
+for source in COUNTRY_SOURCES:
+    df = source.to_long(YEAR)
+    frames.append(df)
+    log.info("Loaded %s: %d sectors, proportions sum = %.4f",
+             source.country, len(df), df["Proportion"].sum())
 
-italy_total = italy_long.groupby("Year")["Amount"].transform("sum")
-italy_long["Proportion"] = italy_long["Amount"] / italy_total
-italy_long["Sector"] = italy_long["Sector"].replace(IT_RENAME)
+df_combined = pd.concat(frames, ignore_index=True)
 
-italy_sectors = (
-    italy_long.groupby("Sector", as_index=False)["Proportion"].sum()
-    .set_index("Sector")["Proportion"]
-    .to_dict()
-)
+# Warn on missing canonical sectors
+for source in COUNTRY_SOURCES:
+    present = set(df_combined.loc[df_combined["Country"] == source.country, "Sector"])
+    absent  = set(SECTOR_ORDER) - present
+    if absent:
+        log.warning("%s: missing sectors (NaN in heatmap): %s",
+                    source.country, sorted(absent))
 
-# -----------------------------
-# Combine to one long dataframe
-# -----------------------------
-df_plot = pd.concat(
-    [
-        sector_dict_to_long(spain_sectors, "Spain", YEAR),
-        sector_dict_to_long(germany_sectors, "Germany", YEAR),
-        sector_dict_to_long(france_sectors, "France", YEAR),
-        sector_dict_to_long(italy_sectors, "Italy", YEAR),
-    ],
-    ignore_index=True,
-)
+# Write to database
+with Database() as db:
+    db.write("stg_sector_shares", df_combined)
 
-# Clean + filter
-df_plot["Sector"] = df_plot["Sector"].astype(str).str.strip()
-df_plot = df_plot[(df_plot["Sector"] != "Other") & (df_plot["Proportion"].notna())]
-df_plot = df_plot[df_plot["Proportion"] > 0]
+# ---------------------------------------------------------------------------
+# Heatmap
+# ---------------------------------------------------------------------------
 
+df_plot = df_combined[
+    df_combined["Sector"].isin(SECTOR_ORDER) & df_combined["Proportion"].notna()
+].copy()
 df_plot["Sector"] = pd.Categorical(df_plot["Sector"], categories=SECTOR_ORDER, ordered=True)
 
-# -----------------------------
-# Heatmap
-# -----------------------------
 df_heat = (
-    df_plot.pivot_table(index="Sector", columns="Country", values="Proportion", aggfunc="sum")
+    df_plot.pivot_table(index="Sector", columns="Country",
+                        values="Proportion", aggfunc="sum")
     .reindex(SECTOR_ORDER)
 )
 
-plt.figure(figsize=(8, 6))
-sns.heatmap(df_heat, annot=True, fmt=".1%", cbar=True, cmap="Blues", linewidths=0.5)
-plt.title(f"GHG sector shares ({YEAR})")
-plt.suptitle("Data sources: Spain (Statista, 2023), Germany (UBA, 2023), France (2024), Italy (Our World in Data, 2023)", fontsize=8)
+gas_notes = " | ".join(
+    f"{s.country} ({s.source_note}, {s.gas.value})" for s in COUNTRY_SOURCES
+)
+
+fig, ax = plt.subplots(figsize=(8, 6))
+sns.heatmap(df_heat, annot=True, fmt=".1%", cbar=True,
+            cmap="Blues", linewidths=0.5, ax=ax)
+ax.set_title(
+    f"GHG / CO₂ sector shares ({YEAR})\n"
+    "Note: Germany and Italy are CO₂-only; Spain and France are full GHG.",
+    fontsize=10, pad=12,
+)
+fig.text(0.5, -0.02, f"Data: {gas_notes}", ha="center", fontsize=7, color="#555555")
 plt.tight_layout()
-plt.savefig(FIG_DIR / "ghg_emissions_by_sector_heatmap.png", bbox_inches="tight")
-plt.close()
+save_fig(fig, FIG_DIR / "ghg_emissions_by_sector_heatmap.png")

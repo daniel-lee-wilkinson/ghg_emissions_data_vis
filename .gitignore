@@ -1,2 +1,11 @@
+
+.venv/
+__pycache__/
+*.pyc
+pipeline.db
+gdp_*.csv
+m49_lookup.csv
 Figures/
-*.csv
+*.egg-info/
+.pytest_cache/
+node_modules/
