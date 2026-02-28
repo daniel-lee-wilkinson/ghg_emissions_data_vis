@@ -1,7 +1,7 @@
 # European GHG Emissions & Agricultural Production Pipeline
 ![tests](https://github.com/daniel-lee-wilkinson/ghg_emissions_data_vis/actions/workflows/tests.yml/badge.svg)
 
-A Python data engineering pipeline that ingests, validates, transforms, and stores greenhouse gas emissions and agricultural production data for Italy, Spain, France, and Germany (1990–2023). Outputs a DuckDB analytical database, six publication-quality figures, and an auto-generated Word report.
+A Python data engineering pipeline that ingests, validates, transforms, and stores greenhouse gas emissions and agricultural production data for Italy, Spain, France, and Germany (1990–2023). Outputs a DuckDB analytical database, five publication-quality figures, and an auto-generated Word report.
 
 ---
 
@@ -11,9 +11,13 @@ A Python data engineering pipeline that ingests, validates, transforms, and stor
 |:--:|:--:|
 | ![Agricultural Gross Production Index](Figures/agricultural_gross_production_index.png) | ![GHG Emissions by Sector](Figures/ghg_emissions_by_sector_heatmap.png) |
 
-| Emissions Index (1990 = 100) | Top Commodity by 5-Year Bin |
+| Emissions & Intensity | Emissions Index (1990 = 100) |
 |:--:|:--:|
-| ![Emissions Index](Figures/fig2_emissions_index.png) | ![Top Items](Figures/top_item_every_5_years_by_country.png) |
+| ![Emissions and Intensity](Figures/fig1_emissions_intensity.png) | ![Emissions Index](Figures/fig2_emissions_index.png) |
+
+| Top Commodity by 5-Year Bin |
+|:--:|
+| ![Top Items](Figures/top_item_every_5_years_by_country.png) |
 
 ---
 
@@ -24,8 +28,9 @@ Data Sources                  Pipeline                     Outputs
 ────────────────              ──────────────────────────   ──────────────────
 FAOSTAT CSVs      ──┐
 World Bank API    ──┼──► loaders.py ──► clean_dat.py ──► DuckDB (pipeline.db)
-UBA Sectors CSV   ──┤             ──► ag_data.py    ──► Figures/ (6 PNGs)
-CITEPA / OWiD     ──┘             ──► sectors.py    ──► report.docx
+UBA Sectors CSV   ──┤             ──► ag_data.py    ──► Figures/ (5 PNGs)
+OWiD / Statista   ──┘             ──► sectors.py    ──► report.docx
+CITEPA (hardcoded)
 ```
 
 **Staging tables** hold cleaned raw data as ingested. **Mart tables** hold transformed, analysis-ready outputs. This mirrors the dbt staging/marts convention.
@@ -36,7 +41,7 @@ CITEPA / OWiD     ──┘             ──► sectors.py    ──► report
 | `stg_ag_production` | Staging | Gross production index |
 | `stg_fv_production` | Staging | Fruit & vegetable production index |
 | `stg_ag_items` | Staging | Commodity-level production index |
-| `stg_sector_shares` | Staging | Normalised sector proportions |
+| `stg_sector_shares` | Staging | Normalised sector proportions for all countries |
 | `stg_gdp` | Staging | World Bank GDP (constant 2015 USD) |
 | `mart_emissions_index` | Mart | Emissions with intensity and 1990=100 index |
 | `mart_percent_change` | Mart | % change 1990 → latest year |
@@ -66,16 +71,17 @@ CITEPA / OWiD     ──┘             ──► sectors.py    ──► report
 ├── loaders.py                 # Reusable data ingestion (FAOSTAT, World Bank, M49)
 ├── clean_dat.py               # GHG emissions transforms and figures
 ├── ag_data.py                 # Agricultural production index analysis
-├── sectors.py                 # Sector-level emissions breakdown
+├── sectors.py                 # Sector-level emissions breakdown and heatmap
 ├── db.py                      # DuckDB database layer
 ├── schemas.py                 # Pandera schema definitions
 ├── plot_utils.py              # Shared plotting utilities
 ├── run_all.py                 # Orchestration runner
-├── build_report.js            # Automated Word report generator
+├── build_report.js            # Automated Word report generator (Node.js / docx)
+├── data_flow.jsx              # Interactive pipeline data flow diagram (React)
 ├── testing/
 │   ├── test_pipeline.py       # Tests for loaders and transforms (44 tests)
-│   ├── test_db.py             # Tests for database layer (22 tests)
-│   └── test_schemas.py        # Tests for Pandera schemas (25 tests)
+│   ├── test_db.py             # Tests for database layer (24 tests)
+│   └── test_schemas.py        # Tests for Pandera schemas (23 tests)
 └── Figures/                   # Output figures (git-ignored)
 ```
 
@@ -112,6 +118,8 @@ Place the following source files in the project root:
 | `UBA_sectors.csv` | [German Environment Agency](https://www.umweltbundesamt.de/en) |
 | `italy_co-emissions-by-sector.csv` | [Our World in Data](https://ourworldindata.org/co2-emissions) |
 
+Spain and France sector data are hardcoded in `sectors.py` from Statista (2023) and CITEPA (2024) respectively.
+
 ### Run
 
 ```bash
@@ -126,7 +134,7 @@ python run_all.py --only emissions sectors
 python run_all.py --cache-only
 
 # Generate the Word report (requires Node.js)
-npm install docx
+npm install
 node build_report.js
 ```
 
@@ -170,7 +178,9 @@ Tests use in-memory DuckDB databases and in-memory DataFrames — no source file
 
 ## Key Design Decisions
 
-**Modular loaders with schema validation.** Each loader function is pure (path in, DataFrame out) and decorated with a Pandera schema. Bad data raises immediately at the ingestion boundary with a clear message showing exactly which rows and columns failed.
+**Modular loaders with schema validation.** Each loader function is pure (path in, DataFrame out) and decorated with a Pandera `@check_output` schema. Bad data raises immediately at the ingestion boundary with a clear message showing exactly which rows and columns failed.
+
+**`CountrySource` dataclass in `sectors.py`.** Each country's sector data is encapsulated in a `CountrySource` dataclass with a `load` callable and a `Gas` enum (`CO2` or `GHG`). The `to_long()` method normalises raw values to proportions and validates that they sum to ~1.0. Adding a new country requires one new entry in the `COUNTRY_SOURCES` registry.
 
 **Staging / mart separation.** Staging tables hold data as it arrives from the source. Mart tables hold the output of transforms. Rerunning a transform step does not require re-ingesting raw data.
 
@@ -183,8 +193,8 @@ Tests use in-memory DuckDB databases and in-memory DataFrames — no source file
 ## Data Notes
 
 - FAOSTAT emissions series covers 1990–2021. Agricultural production index covers 1990–2017.
-- Sector-level breakdown uses heterogeneous sources: Germany and Italy report CO₂ equivalents only (UBA, Our World in Data); France and Spain report full GHG baskets (CITEPA, Statista). Cross-country sector comparisons should be interpreted with this in mind.
-- Spain is absent from the gross production index series due to unavailability in the FAOSTAT regional files used.
+- Spain is absent from the gross production index series (`stg_ag_production`) due to unavailability in the FAOSTAT regional files used. It does appear in the commodity-level dataset (`stg_ag_items`).
+- Sector-level breakdown uses heterogeneous sources aligned to 2023: Germany (UBA) and Italy (Our World in Data) report CO₂ only; France (CITEPA) and Spain (Statista) report full GHG baskets. Cross-country sector comparisons should be interpreted with this in mind — agriculture's share appears artificially small for Germany because agricultural CH₄ and N₂O are excluded from the CO₂-only UBA series.
 
 ---
 
@@ -195,3 +205,4 @@ Tests use in-memory DuckDB databases and in-memory DataFrames — no source file
 - [ ] Expand to additional EU countries using the existing extensible architecture
 - [ ] Add dbt models for the transform layer
 - [ ] Schedule pipeline runs with Airflow or GitHub Actions on a cron trigger
+- [ ] Replace heterogeneous sector sources with a harmonised dataset (e.g. UNFCCC National Inventory Submissions or EEA reporting)
