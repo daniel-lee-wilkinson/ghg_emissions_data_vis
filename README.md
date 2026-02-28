@@ -183,7 +183,7 @@ Tests use in-memory DuckDB databases and in-memory DataFrames — no source file
 ## Data Notes
 
 - FAOSTAT emissions series covers 1990–2021. Agricultural production index covers 1990–2017.
-- Sector-level breakdown uses heterogeneous sources: Germany and Italy report CO₂ only (UBA, Our World in Data); France and Spain report full GHG baskets (CITEPA, Statista). Cross-country sector comparisons should be interpreted with this in mind.
+- Sector-level breakdown uses heterogeneous sources: Germany and Italy report CO₂ equivalents only (UBA, Our World in Data); France and Spain report full GHG baskets (CITEPA, Statista). Cross-country sector comparisons should be interpreted with this in mind.
 - Spain is absent from the gross production index series due to unavailability in the FAOSTAT regional files used.
 
 ---

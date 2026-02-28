@@ -214,8 +214,8 @@ fig, ax = plt.subplots(figsize=(8, 6))
 sns.heatmap(df_heat, annot=True, fmt=".1%", cbar=True,
             cmap="Blues", linewidths=0.5, ax=ax)
 ax.set_title(
-    f"GHG / CO₂ sector shares ({YEAR})\n"
-    "Note: Germany and Italy are CO₂-only; Spain and France are full GHG.",
+    f"GHG / CO₂-eq sector shares ({YEAR})\n"
+    "Note: Germany and Italy are CO₂ equivalents only; Spain and France are CO₂ gas only.",
     fontsize=10, pad=12,
 )
 fig.text(0.5, -0.02, f"Data: {gas_notes}", ha="center", fontsize=7, color="#555555")
