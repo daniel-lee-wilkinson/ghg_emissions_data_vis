@@ -198,6 +198,12 @@ Tests use in-memory DuckDB databases and in-memory DataFrames — no source file
 
 ---
 
+## Analytical Findings
+
+The pipeline was built to investigate why Spain's emissions diverged from the other three countries, agricultural data didn't support that hypothesis, and a satisfying explanation would require harmonised sector-level data that current sources don't provide
+
+---
+
 ## Potential Extensions
 
 - [ ] Add a FastAPI layer to serve mart tables as REST endpoints

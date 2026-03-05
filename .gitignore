@@ -9,3 +9,5 @@ m49_lookup.csv
 *.egg-info/
 .pytest_cache/
 node_modules/
+.github/
+.idea/
