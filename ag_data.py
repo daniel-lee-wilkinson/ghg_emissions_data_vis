@@ -26,7 +26,8 @@ from config import (
 from db import Database
 from loaders import EXTRA_AG_COLS, load_faostat, load_faostat_multi
 from plot_utils import figure, save_fig
-
+import matplotlib.patheffects as pe
+from matplotlib.gridspec import GridSpec
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
@@ -75,8 +76,7 @@ with figure(figsize=(10, 6)) as (fig, ax):
 # ---------------------------------------------------------------------------
 # Figure 3 — top item per 5-year bin
 # ---------------------------------------------------------------------------
-import matplotlib.patheffects as pe
-from matplotlib.gridspec import GridSpec
+
 
 df = all_ag_data.copy()
 df["Year"]  = pd.to_numeric(df["Year"],  errors="coerce")
